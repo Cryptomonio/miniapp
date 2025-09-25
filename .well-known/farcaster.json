@@ -11,9 +11,9 @@
     "tags": ["crypto", "prediction", "market"]
   },
   "accountAssociation": {
-    "header": "CRYPDICT",
-    "payload": "REPLACE_WITH_PAYLOAD",
-    "signature": "REPLACE_WITH_SIGNATURE"
+    "header": "eyJmaWQiOjM4MjcwOSwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDc0OTg1NmQ2MTkwNkRBZTA2MTY5NEYzMDUxMEQzMzhmMWE5NDcyOUUifQ",
+    "payload": "eyJkb21haW4iOiJtaW5pYXBwLTRoMngudmVyY2VsLmFwcCJ9",
+    "signature": "31b4HO+Ghw3cN9ZGElclRKOFHumHXYKmenNeaa8HLOgVaEX+5o9DE5eeCVRBxfR+sLEPUzhvOBvLhdcYy35Xoxw="
   }
 }
 
