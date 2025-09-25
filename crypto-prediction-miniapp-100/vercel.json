@@ -1,6 +1,9 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/.well-known/farcaster.json", "destination": "/api/manifest" }
+    {
+      "source": "/.well-known/farcaster.json",
+      "destination": "/api/manifest"
+    }
   ]
 }
