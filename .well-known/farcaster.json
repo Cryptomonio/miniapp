@@ -11,7 +11,7 @@
     "tags": ["crypto", "prediction", "market"]
   },
   "accountAssociation": {
-    "header": "REPLACE_WITH_HEADER",
+    "header": "CRYPDICT",
     "payload": "REPLACE_WITH_PAYLOAD",
     "signature": "REPLACE_WITH_SIGNATURE"
   }
