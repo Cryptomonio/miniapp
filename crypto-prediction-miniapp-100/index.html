@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Crypto Prediction (Mini Market)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Farcaster Mini App embed -->
+  <meta name="fc:miniapp" content='{
+    "version":"1",
+    "imageUrl":"/og.png",
+    "button":{"title":"Open Prediction App","action":{"type":"launch_miniapp"}}
+  }' />
+  <meta name="fc:frame" content='{
+    "version":"1",
+    "imageUrl":"/og.png",
+    "button":{"title":"Open","action":{"type":"launch_frame"}}
+  }' />
+
+  <style>
+    :root { --bg:#0b0b10; --card:#15161c; --text:#eaeaf0; --muted:#9aa0aa; --accent:#7cf; }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#0a0a0f,#0e131a 40%,#0a0a0f);color:var(--text);font-family:system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell}
+    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    .card{background:#15161c;border:1px solid #23263a;border-radius:18px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+    h1{margin:0 0 6px;font-size:22px}
+    .sub{color:var(--muted);margin:0 0 14px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input,select,button{font:inherit;padding:12px;border-radius:12px;border:1px solid #2a2f43;background:#0e1118;color:#fff}
+    input[type="search"]{width:260px}
+    button.primary{background:linear-gradient(90deg,#41e0ff,#7f7bff);color:#071018;border:none;font-weight:700;cursor:pointer}
+    .pill{background:#0f1320;border:1px solid #272c3f;border-radius:12px;padding:10px 12px}
+    .muted{color:var(--muted)}
+    .market{margin-top:14px;padding:12px;border:1px dashed #2b3150;border-radius:12px}
+    .positions{margin-top:16px}
+    .pos{display:grid;grid-template-columns:1fr auto auto auto auto;gap:8px;align-items:center;background:#101426;border:1px solid #2a2f43;border-radius:12px;padding:10px 12px;margin-top:8px}
+    .pos small{color:var(--muted)}
+    .right{justify-self:end}
+    .warn{color:#f7d27b}
+    .ok{color:#7ef29a}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>₿ Crypto Prediction</h1>
+      <p class="sub">Mini prediction market with play credits. Not financial advice.</p>
+
+      <div class="grid">
+        <div>
+          <div class="row">
+            <label>Search</label>
+            <input type="search" id="coinSearch" placeholder="Type name or symbol (e.g., BTC, SOL, pepe)"/>
+          </div>
+          <div class="row">
+            <label>Coin</label>
+            <select id="coinSel"></select>
+          </div>
+          <div class="row">
+            <label>Horizon</label>
+            <select id="horizonSel">
+              <option value="15">15 minutes</option>
+              <option value="60" selected>1 hour</option>
+              <option value="240">4 hours</option>
+              <option value="1440">24 hours</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Strike</label>
+            <select id="strikeType">
+              <option value="pct" selected>± % of current</option>
+              <option value="abs">Fixed USD</option>
+            </select>
+            <input type="number" id="strikeVal" value="2" step="0.1" style="width:120px"/>
+            <span class="muted" id="strikeExplain"></span>
+          </div>
+          <div class="row">
+            <button class="primary" id="refresh">↻ Refresh price</button>
+            <span class="muted">Current: <b id="spot">—</b></span>
+          </div>
+          <div class="market">
+            <div class="row"><b>Market:</b> Will price be <b>above</b> strike at expiry?</div>
+            <div class="row">
+              <span>Strike:</span> <b id="strike">—</b>
+              <span class="muted">| Expiry:</span> <b id="expiry">—</b>
+            </div>
+            <div class="row">
+              <span>Implied YES probability:</span> <b id="pYes">—</b>
+              <span class="muted">(from recent volatility)</span>
+            </div>
+            <div class="row">
+              <label>Qty</label>
+              <input type="number" id="qty" value="1" min="1" step="1" style="width:100px"/>
+              <button id="buyYes" class="primary">Buy YES</button>
+              <button id="buyNo"  class="primary">Buy NO</button>
+            </div>
+            <div class="row">
+              <span>Cost per share: <b id="costYes">—</b> (YES) · <b id="costNo">—</b> (NO)</span>
+              <span class="muted">Pays 100 on correct outcome</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="pill">Balance: <b id="balance">—</b> credits</div>
+          <div class="positions">
+            <b>Positions</b>
+            <div id="posList" class="muted">No positions yet.</div>
+          </div>
+        </div>
+      </div>
+
+      <p class="sub" id="note" style="margin-top:12px"></p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+    await sdk.actions.ready();
+
+    const el = (id) => document.getElementById(id);
+    const fmtUSD = (x) => '$' + Number(x).toLocaleString(undefined,{maximumFractionDigits:2});
+    const pct = (x) => (Math.round(x*1000)/10).toFixed(1)+'%';
+    const now = () => Date.now();
+    const minutes = (m) => m*60*1000;
+
+    // Storage
+    function loadState(){ try{ return JSON.parse(localStorage.getItem('pred_state')||'{}'); }catch{ return {}; } }
+    function saveState(s){ localStorage.setItem('pred_state', JSON.stringify(s)); }
+    const state = loadState();
+    if (typeof state.balance !== 'number') state.balance = 1000;
+    if (!Array.isArray(state.positions)) state.positions = [];
+    saveState(state);
+
+    // UI refs
+    const coinSearch = el('coinSearch');
+    const coinSel = el('coinSel');
+    const horizonSel = el('horizonSel');
+    const strikeType = el('strikeType');
+    const strikeVal  = el('strikeVal');
+    const strikeExplain = el('strikeExplain');
+    const refreshBtn = el('refresh');
+    const spotEl = el('spot');
+    const pYesEl = el('pYes');
+    const strikeEl = el('strike');
+    const expiryEl = el('expiry');
+    const qtyEl = el('qty');
+    const costYesEl = el('costYes');
+    const costNoEl = el('costNo');
+    const balanceEl = el('balance');
+    const posList = el('posList');
+    const note = el('note');
+
+    balanceEl.textContent = state.balance.toFixed(0);
+
+    // ---------------------------------------------
+    // Dynamic coin list (top 100 by market cap)
+    // ---------------------------------------------
+    const BASE = 'https://api.coingecko.com/api/v3';
+    let COINS = [];         // full list
+    let FILTERED = [];      // filtered view
+
+    async function loadCoins(){
+      try{
+        const url = `${BASE}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('Failed to load coins');
+        const arr = await r.json(); // [{id,symbol,name,current_price,...}]
+        COINS = arr.map(c => ({id:c.id, symbol:c.symbol.toUpperCase(), name:c.name}));
+        FILTERED = COINS.slice();
+        renderCoinOptions();
+      }catch(e){
+        note.textContent = 'Could not load coin list. Try again or deploy to Vercel.';
+        console.error(e);
+      }
+    }
+
+    function renderCoinOptions(selectedId){
+      const sel = coinSel;
+      const current = selectedId || sel.value;
+      sel.innerHTML = '';
+      FILTERED.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = `${c.name} (${c.symbol})`;
+        sel.appendChild(o);
+      });
+      // preserve selection if possible
+      if (FILTERED.some(c => c.id === current)){
+        sel.value = current;
+      }
+    }
+
+    function applySearch(){
+      const q = coinSearch.value.trim().toLowerCase();
+      if (!q){
+        FILTERED = COINS.slice();
+      } else {
+        FILTERED = COINS.filter(c => c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q));
+      }
+      renderCoinOptions();
+    }
+
+    coinSearch.addEventListener('input', applySearch);
+
+    // ---------------------------------------------
+    // CoinGecko data
+    // ---------------------------------------------
+    async function getSpot(id){
+      const url = `${BASE}/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('Failed spot');
+      const j = await r.json();
+      return j[id]?.usd;
+    }
+    async function getRange(id, from, to){
+      const url = `${BASE}/coins/${encodeURIComponent(id)}/market_chart/range?vs_currency=usd&from=${Math.floor(from/1000)}&to=${Math.floor(to/1000)}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('Failed range');
+      return await r.json();
+    }
+    async function getRecentDay(id){
+      const url = `${BASE}/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=1&interval=hourly`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('Failed chart');
+      return await r.json();
+    }
+
+    function logRetSeries(prices){
+      const out=[];
+      for(let i=1;i<prices.length;i++){
+        const p0 = prices[i-1][1], p1 = prices[i][1];
+        if (p0>0 && p1>0) out.push(Math.log(p1/p0));
+      }
+      return out;
+    }
+    function stdev(xs){
+      const n=xs.length; if (!n) return 0;
+      const mean=xs.reduce((a,b)=>a+b,0)/n;
+      const v=xs.reduce((a,b)=>a+(b-mean)*(b-mean),0)/(n-1||1);
+      return Math.sqrt(v);
+    }
+    function normCDF(z){
+      const t = 1 / (1 + 0.2316419 * Math.abs(z));
+      const d = 0.3989423 * Math.exp(-z*z/2);
+      let p = d * t * (0.3193815 + t*(-0.3565638 + t*(1.781478 + t*(-1.821256 + t*1.330274))));
+      if (z > 0) p = 1 - p;
+      return p;
+    }
+
+    async function buildMarket(){
+      const id = coinSel.value;
+      if (!id){ note.textContent = 'Select a coin first.'; return; }
+      const horizonMin = parseInt(horizonSel.value,10);
+      const spot = await getSpot(id);
+      spotEl.textContent = fmtUSD(spot);
+
+      // Strike
+      let strike=spot;
+      if (strikeType.value === 'pct'){
+        const pctVal = Number(strikeVal.value||0)/100;
+        strike = spot * (1 + pctVal);
+        strikeExplain.textContent = `(current × (1 + ${Number(strikeVal.value).toFixed(1)}%))`;
+      } else {
+        strike = Number(strikeVal.value||0);
+        strikeExplain.textContent = `(fixed USD)`;
+      }
+      strikeEl.textContent = fmtUSD(strike);
+
+      const expiryTs = now() + minutes(horizonMin);
+      expiryEl.textContent = new Date(expiryTs).toLocaleString();
+
+      // Probability
+      const recent = await getRecentDay(id);
+      const prices = recent.prices || [];
+      const rets = logRetSeries(prices);
+      const sigmaPerStep = stdev(rets);
+      const stepsPerDay = prices.length > 1 ? ( (prices[prices.length-1][0]-prices[0][0]) / (1000*60*60) ) / (prices.length-1) : 1;
+      const sigmaDaily = sigmaPerStep / Math.sqrt(Math.max(stepsPerDay,1));
+      const Tdays = horizonMin / (60*24);
+      const sigmaT = sigmaDaily * Math.sqrt(Tdays);
+      const z = (Math.log(strike/spot)) / Math.max(sigmaT, 1e-6);
+      let pYes = 1 - normCDF(z);
+      pYes = Math.min(0.99, Math.max(0.01, pYes));
+
+      pYesEl.textContent = pct(pYes);
+
+      const priceYes = Math.round(pYes*100);
+      const priceNo  = 100 - priceYes;
+      costYesEl.textContent = priceYes + ' cr';
+      costNoEl.textContent  = priceNo + ' cr';
+
+      const qty = ()=> Math.max(1, parseInt(qtyEl.value||'1',10));
+      el('buyYes').onclick = ()=> buy('YES', id, spot, strike, expiryTs, priceYes, qty());
+      el('buyNo').onclick  = ()=> buy('NO' , id, spot, strike, expiryTs, priceNo , qty());
+    }
+
+    function buy(side, id, spot, strike, expiryTs, price, qty){
+      const cost = price * qty;
+      if (state.balance < cost) { alert('Not enough credits'); return; }
+      state.balance -= cost;
+      const ticket = {
+        id: 'T'+Math.random().toString(36).slice(2),
+        coin: id,
+        side, qty, price, cost,
+        createdAt: Date.now(),
+        expiry: expiryTs,
+        strike, spotAtBuy: spot,
+        settled: false
+      };
+      state.positions.unshift(ticket);
+      saveState(state);
+      render();
+    }
+
+    async function settle(pos){
+      const id = pos.coin;
+      const from = pos.expiry - 5*60*1000;
+      const to   = pos.expiry + 5*60*1000;
+      try{
+        const range = await getRange(id, from, to);
+        const arr = (range.prices||[]).map(x => ({t:x[0], p:x[1]}));
+        if (!arr.length) throw new Error('no prices');
+        let best = arr[0];
+        for (const o of arr){ if (Math.abs(o.t - pos.expiry) < Math.abs(best.t - pos.expiry)) best = o; }
+        const settleP = best.p;
+        const over = settleP > pos.strike;
+        const yesWins = over;
+        const win = (pos.side === 'YES') ? yesWins : !yesWins;
+        const payout = win ? (100 * pos.qty) : 0;
+        state.balance += payout;
+        pos.settled = true;
+        pos.settlePrice = settleP;
+        pos.payout = payout;
+        saveState(state);
+        render();
+      }catch(e){
+        alert('Failed to settle (try again later).');
+        console.error(e);
+      }
+    }
+
+    function render(){
+      balanceEl.textContent = state.balance.toFixed(0);
+      if (!state.positions.length){
+        posList.textContent = 'No positions yet.';
+        return;
+      }
+      posList.innerHTML = '';
+      for(const p of state.positions){
+        const canSettle = !p.settled && Date.now() >= p.expiry;
+        const row = document.createElement('div');
+        row.className = 'pos';
+        row.innerHTML = `
+          <div>
+            <b>${p.coin}</b>
+            <small>· ${p.side} · strike ${fmtUSD(p.strike)} · qty ${p.qty}</small><br/>
+            <small>Buy ${new Date(p.createdAt).toLocaleString()} · Exp ${new Date(p.expiry).toLocaleString()}</small>
+          </div>
+          <div class="right"><small>Paid</small><br/><b>${p.cost}</b></div>
+          <div class="right"><small>Status</small><br/>${p.settled ? '<span class="ok">Settled</span>' : (canSettle ? '<span class="warn">Ready</span>' : '<span class="muted">Pending</span>')}</div>
+          <div class="right"><small>${p.settled ? 'Settle Px' : 'Strike'}</small><br/>${p.settled ? fmtUSD(p.settlePrice) : fmtUSD(p.strike)}</div>
+          <div class="right">
+            ${p.settled ? `<small>Payout</small><br/><b>${p.payout}</b>` : (canSettle ? '<button class="primary" id="s_'+p.id+'">Settle</button>' : '')}
+          </div>
+        `;
+        posList.appendChild(row);
+        if (canSettle){
+          const btn = row.querySelector('#s_'+p.id);
+          btn.onclick = ()=> settle(p);
+        }
+      }
+    }
+
+    // Events
+    el('refresh').onclick = ()=> buildMarket();
+    coinSel.onchange = ()=> buildMarket();
+    horizonSel.onchange = ()=> buildMarket();
+    el('strikeType').onchange = ()=> buildMarket();
+    el('strikeVal').oninput = ()=> buildMarket();
+
+    // Init: load coins then market
+    loadCoins().then(()=> {
+      if (coinSel.options.length) coinSel.selectedIndex = 0;
+      buildMarket().then(()=> render());
+    }).catch(e=>{
+      note.textContent = 'If requests are blocked by CORS, deploy to Vercel or use Live Server.';
+      console.error(e);
+    });
+  </script>
+</body>
+</html>
