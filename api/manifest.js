@@ -4,7 +4,7 @@
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end("Method Not Allowed");
 
-  const id = process.env.HOSTED_MANIFEST_ID;
+  const id = process.env.HOSTED_MANIFEST_ID;01998292-2120-9760-43ef-aa2ae8ae6f2f
   if (!id) {
     return res
       .status(500)
@@ -13,7 +13,7 @@ export default async function handler(req, res) {
 
   try {
     const upstream = await fetch(
-      `https://api.farcaster.xyz/miniapps/hosted-manifest/${=01998292-2120-9760-43ef-aa2ae8ae6f2f}`,
+      `https://api.farcaster.xyz/miniapps/hosted-manifest/${01998292-2120-9760-43ef-aa2ae8ae6f2f}`,
       { headers: { accept: "application/json" }, cache: "no-store" }
     );
 
