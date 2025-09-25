@@ -1,0 +1,18 @@
+{
+  "miniapp": {
+    "version": "1",
+    "name": "Crypto Prediction",
+    "homeUrl": "https://miniapp-4h2x.vercel.app/",
+    "iconUrl": "https://miniapp-4h2x.vercel.app/icon-1024.png",
+    "splashImageUrl": "https://miniapp-4h2x.vercel.app/icon-200.png",
+    "splashBackgroundColor": "#0b0b10",
+    "primaryCategory": "finance",
+    "description": "Over/under crypto markets with play credits.",
+    "tags": ["crypto", "prediction", "market"]
+  },
+  "accountAssociation": {
+    "header": "REPLACE_WITH_HEADER",
+    "payload": "REPLACE_WITH_PAYLOAD",
+    "signature": "REPLACE_WITH_SIGNATURE"
+  }
+}
